@@ -7,6 +7,11 @@
       "paths": {
         "db/version_set.cc": "4e37bf90e99558f8ed071ef1f91f744d78c52d37",
         "util/env_windows.cc": "ae5149a505717054261e5e01a31ee1ace315afdf"
+      },
+      "release": {
+        "tag": "1.23",
+        "url": "https://github.com/google/leveldb/releases/tag/1.23",
+        "published": "2021-02-23"
       }
     }
   }
