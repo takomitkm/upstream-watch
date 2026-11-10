@@ -1,0 +1,58 @@
+name: 'upstream-watch'
+description: 'Watch upstream repos for changes to watched file paths; alert via a labeled issue'
+branding:
+  icon: 'eye'
+  color: 'blue'
+
+inputs:
+  vendor:
+    description: 'Path (in the calling repo) to the watch manifest (JSON)'
+    required: false
+    default: '.upstream-watch/vendor.json'
+  state:
+    description: 'Path (in the calling repo) to the state file (auto-created and committed back)'
+    required: false
+    default: '.upstream-watch/state.json'
+  repo:
+    description: 'Repository to file issues in (default: the calling repository)'
+    required: false
+    default: ''
+  token:
+    description: 'GitHub token for API reads, issue filing and state commits'
+    required: false
+    default: ${{ github.token }}
+  commit-state:
+    description: 'Commit the refreshed state file back (true/false)'
+    required: false
+    default: 'true'
+
+runs:
+  using: composite
+  steps:
+    - name: Watch upstreams
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.token }}
+        UW_VENDOR: ${{ inputs.vendor }}
+        UW_STATE: ${{ inputs.state }}
+        UW_REPO: ${{ inputs.repo }}
+      run: |
+        REPO_INPUT="${UW_REPO:-$GITHUB_REPOSITORY}"
+        python3 "$GITHUB_ACTION_PATH/watch_upstream.py" \
+          --vendor "$UW_VENDOR" --state "$UW_STATE" --repo "$REPO_INPUT"
+
+    - name: Commit refreshed state
+      if: ${{ inputs.commit-state == 'true' }}
+      shell: bash
+      env:
+        UW_STATE: ${{ inputs.state }}
+      run: |
+        if [ -n "$(git status --porcelain -- "$UW_STATE")" ]; then
+          git config user.name "upstream-watch[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- "$UW_STATE"
+          git commit -m "watch: refresh upstream state [skip ci]"
+          git push
+        else
+          echo "state unchanged"
+        fi

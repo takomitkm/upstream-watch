@@ -1,0 +1,18 @@
+{
+  "_说明": "vendor.json 示例：抄走改成自己的上游。paths 里每个文件盯 blob sha，submodule 目录盯指针。",
+  "issue": {
+    "label": "upstream-watch",
+    "title_prefix": "[upstream-watch] 上游有变化: "
+  },
+  "upstreams": [
+    {
+      "name": "google/leveldb",
+      "ref": "main",
+      "reason": "示例：上游一旦改动这些文件，请复核你的补丁 / vendor 副本是否仍成立",
+      "paths": [
+        "db/version_set.cc",
+        "util/env_windows.cc"
+      ]
+    }
+  ]
+}

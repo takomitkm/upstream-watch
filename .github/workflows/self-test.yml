@@ -1,0 +1,33 @@
+# 自测：e2e 直接以 `uses: ./` 跑本 action 本体（vendor.example.json 盯一个冻结上游，
+# 正常情况下零报警零 issue）；lint 校验语法。weekly cron 顺带给本仓库续 cron 的命。
+name: self-test
+
+on:
+  push:
+    paths-ignore: ['**.md', 'LICENSE']
+  workflow_dispatch:
+  schedule:
+    - cron: '11 2 * * 1'
+
+permissions:
+  contents: write   # e2e 的 state 提交回本仓库
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - run: |
+          python3 -m py_compile watch_upstream.py
+          python3 -c "import json,io; json.load(io.open('vendor.example.json',encoding='utf-8')); print('json ok')"
+
+  action-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./
+        with:
+          vendor: vendor.example.json
+          state: .selftest-state.json
