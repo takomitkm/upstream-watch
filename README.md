@@ -44,12 +44,20 @@ jobs:
     {
       "name": "owner/repo",       // 被监视的上游仓库
       "ref": "main",              // 被监视的分支/-tag
+      "release": true,            // 可选：顺带盯最新 release，发新版即报警
       "reason": "为什么盯它",      // 原样出现在报警 issue 里
       "paths": ["dir/file.cc", "submodule-dir"]   // 文件盯 blob sha，submodule 盯指针
     }
   ]
 }
 ```
+
+## 报警长什么样
+
+- 表格：路径、blob sha 迁移、每文件 **+N −M** 统计、最近触碰提交的链接；
+- 每个变化的文件附**截断 patch**（`<details>` 折叠，默认 40 行，点 commit 看全文）；
+- 表头有旧 tip → 新 tip 的 **compare 链接**（上游 force-push 等取不到时自动降级为无 patch）；
+- 配了 `release: true` 的上游，发新版会在同一 issue 里单独一行告警。
 
 ## 行为约定
 

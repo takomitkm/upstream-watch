@@ -8,7 +8,8 @@
     {
       "name": "google/leveldb",
       "ref": "main",
-      "reason": "示例：上游一旦改动这些文件，请复核你的补丁 / vendor 副本是否仍成立",
+      "release": true,
+      "reason": "示例：上游一旦改动这些文件，请复核你的补丁 / vendor 副本是否仍成立；release:true 顺带盯最新 release",
       "paths": [
         "db/version_set.cc",
         "util/env_windows.cc"
