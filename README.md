@@ -40,12 +40,17 @@ jobs:
 ```json
 {
   "issue": { "label": "upstream-watch", "title_prefix": "[upstream-watch] 上游有变化: " },
+  "notify": [ { "type": "webhook", "env": "UW_WEBHOOK_URL", "format": "slack|json" } ],
+  "discover": { "gitmodules": true },
   "upstreams": [
     {
-      "name": "owner/repo",       // 被监视的上游仓库
-      "ref": "main",              // 被监视的分支/-tag
-      "release": true,            // 可选：顺带盯最新 release，发新版即报警
-      "reason": "为什么盯它",      // 原样出现在报警 issue 里
+      "label": "显示名(默认=repo)",      // state 键；同名不同 ref 靠它区分
+      "repo": "owner/repo",             // 被监视的上游仓库（旧写法 "name" 兼容）
+      "ref": "main",                    // 被监视的分支/-tag
+      "release": true,                  // 可选：盯最新 release，发新版即报警
+      "conflict_branch": "my-patches",  // 可选：把该分支与上游 tip 做 merge-tree 冲突预演
+      "conflict_repo": "owner/patches", // 可选：分支所在仓库，默认=消费仓
+      "reason": "为什么盯它",
       "paths": ["dir/file.cc", "submodule-dir"]   // 文件盯 blob sha，submodule 盯指针
     }
   ]
@@ -57,14 +62,12 @@ jobs:
 - 表格：路径、blob sha 迁移、每文件 **+N −M** 统计、最近触碰提交的链接；
 - 每个变化的文件附**截断 patch**（`<details>` 折叠，默认 40 行，点 commit 看全文）；
 - 表头有旧 tip → 新 tip 的 **compare 链接**（上游 force-push 等取不到时自动降级为无 patch）；
-- 配了 `release: true` 的上游，发新版会在同一 issue 里单独一行告警。
-
-## 行为约定
-
-- 首跑建基线；新加的上游/路径首轮静默记档，第二轮起才参与报警。
+- 配了 `conflict_branch` 的上游带**冲突预演**：`git merge-tree` 内存三方合并，报"可干净合入 /
+  预期冲突（文件列表）/ 无法预演"，只预报不动任何分支；
+- 配了 `release: true` 的上游发新版：单独一行告警 + release notes（截断）；
+- 配了 `"discover": {"gitmodules": true}` 的：自动发现消费仓 `.gitmodules` 里的子模块，
+  钉住的指针落后上游分支（有新提交可用）即报警；认过的 tip 不重复报；
 - 同一时刻最多一个开放 issue：有则评论、无则新建；人工确认后关闭。
-- state 在报警成功**之后**才写盘：宁可下次重复提醒，不可静默丢失。
-- state 由 action 自动 commit 回来（消息带 `[skip ci]`，不会自触发）。
 
 ## 输入（`with:`）
 
@@ -75,13 +78,25 @@ jobs:
 | `repo` | 当前仓库 | issue 开到哪个仓库 |
 | `token` | `github.token` | API 读取 / 开 issue / 提交 state |
 | `commit-state` | `true` | 是否把刷新后的 state 提交回来 |
+| `webhook-url` | 空 | 报警发出后 POST 摘要（`notify` 里 `format: slack` 发 Slack 形态）；从 Secret 传入 |
+| `keepalive` | `false` | 分支 tip 超 40 天无提交且本轮 state 没动过时打一个空提交，防 GitHub 停 60 天闲置 cron |
+| `smoke-workflow` | 空 | 报警发出后 dispatch 的 workflow 文件名（需 workflow `permissions` 加 `actions: write`） |
+| `smoke-ref` | 当前 ref | 冒烟 dispatch 用的 ref |
+
+## 行为约定
+
+- 首跑建基线；新加的上游/路径/子模块首轮静默记档，第二轮起才参与报警。
+- state 在报警成功**之后**才写盘：宁可下次重复提醒，不可静默丢失。
+- state 由 action 自动 commit 回来（消息带 `[skip ci]`，不会自触发）。
+- 冲突预演只在消费仓 checkout 里 fetch + `merge-tree`（`--depth 300`），不 push、不改分支；
+  失败（历史不足/私有不可达）在 issue 里如实写"无法预演"。
 
 ## 限制
 
-- 只认 GitHub API：Fossil / tarball / 邮件列表发版的上游盯不了。
-- 只盯路径内容与 submodule 指针：不发版通知（用 Watch releases）、不扫 CVE（用 osv-scanner）、
-  不解析 diff 语义——报警只说明"该去看了"。
-- GitHub 会在仓库 60 天无动静后自动停 cron；上游长期安静时手动 dispatch 续命。
+- 源只认 GitHub（API + git fetch）；tarball/Fossil 类上游盯不了。
+- 只盯路径内容、submodule 指针与 release：不扫 CVE（osv-scanner）、不解析 diff 语义——
+  报警只说明"该去看了"。
+- GitHub 会在仓库 60 天无动静后自动停 cron；上游长期安静时开 `keepalive` 或手动 dispatch 续命。
 
 ## License
 

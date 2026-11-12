@@ -19,7 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - run: |
-          python3 -m py_compile watch_upstream.py
+          python3 -m py_compile watch_upstream.py conflict_preview.py
           python3 -c "import json,io; json.load(io.open('vendor.example.json',encoding='utf-8')); print('json ok')"
 
   action-e2e:

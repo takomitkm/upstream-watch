@@ -25,10 +25,38 @@ inputs:
     description: 'Commit the refreshed state file back (true/false)'
     required: false
     default: 'true'
+  webhook-url:
+    description: 'Optional webhook URL (pass from a Secret); POSTed a summary when an alert is delivered'
+    required: false
+    default: ''
+  keepalive:
+    description: 'Optional: push an empty commit when the branch tip is older than 40 days, to keep scheduled workflows alive (true/false)'
+    required: false
+    default: 'false'
+  smoke-workflow:
+    description: 'Optional: workflow filename to dispatch after an alert is delivered (needs actions:write permission)'
+    required: false
+    default: ''
+  smoke-ref:
+    description: 'Ref used when dispatching the smoke workflow'
+    required: false
+    default: ${{ github.ref_name }}
 
 runs:
   using: composite
   steps:
+    - name: Conflict preview
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.token }}
+        UW_VENDOR: ${{ inputs.vendor }}
+        UW_CONSUMER_REPO: ${{ github.repository }}
+      run: |
+        python3 "$GITHUB_ACTION_PATH/conflict_preview.py" \
+          --vendor "$UW_VENDOR" \
+          --out .upstream-watch/conflict-report.md \
+          --consumer-repo "$UW_CONSUMER_REPO"
+
     - name: Watch upstreams
       shell: bash
       env:
@@ -36,13 +64,16 @@ runs:
         UW_VENDOR: ${{ inputs.vendor }}
         UW_STATE: ${{ inputs.state }}
         UW_REPO: ${{ inputs.repo }}
+        UW_WEBHOOK_URL: ${{ inputs.webhook-url }}
       run: |
         REPO_INPUT="${UW_REPO:-$GITHUB_REPOSITORY}"
         python3 "$GITHUB_ACTION_PATH/watch_upstream.py" \
-          --vendor "$UW_VENDOR" --state "$UW_STATE" --repo "$REPO_INPUT"
+          --vendor "$UW_VENDOR" --state "$UW_STATE" --repo "$REPO_INPUT" \
+          --workspace "$GITHUB_WORKSPACE" \
+          --conflict-report .upstream-watch/conflict-report.md \
+          --alerted-marker .upstream-watch/.alerted
 
     - name: Commit refreshed state
-      if: ${{ inputs.commit-state == 'true' }}
       shell: bash
       env:
         UW_STATE: ${{ inputs.state }}
@@ -55,4 +86,46 @@ runs:
           git push
         else
           echo "state unchanged"
+        fi
+
+    - name: Keepalive (optional)
+      if: ${{ inputs.keepalive == 'true' }}
+      shell: bash
+      env:
+        UW_STATE: ${{ inputs.state }}
+      run: |
+        # GitHub 在仓库 60 天无动静后自动停 scheduled workflow；
+        # tip 超过 40 天无提交且本轮 state 没动过，就打一个空提交续命。
+        if [ -z "$(git status --porcelain -- "$UW_STATE")" ]; then
+          last=$(git log -1 --format=%ct)
+          now=$(date +%s)
+          if [ $((now - last)) -gt 3456000 ]; then
+            git commit --allow-empty -m "keepalive: prevent scheduled-workflow auto-disable [skip ci]"
+            git push
+          else
+            echo "keepalive: branch tip is $(( (now - last) / 86400 )) days old, no-op"
+          fi
+        fi
+
+    - name: Smoke test (optional, after alert)
+      if: ${{ inputs.smoke-workflow != '' }}
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.token }}
+        UW_SMOKE: ${{ inputs.smoke-workflow }}
+        UW_SMOKE_REF: ${{ inputs.smoke-ref }}
+      run: |
+        if [ -f .upstream-watch/.alerted ]; then
+          code=$(curl -sS --max-time 60 -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -o /dev/null -w '%{http_code}' \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/workflows/$UW_SMOKE/dispatches" \
+            -d "{\"ref\":\"$UW_SMOKE_REF\"}")
+          echo "smoke dispatch -> HTTP $code"
+          if [ "$code" != "204" ]; then
+            echo "::warning::smoke dispatch failed (HTTP $code) — check actions:write permission"
+          fi
+        else
+          echo "no alert this run, smoke skipped"
         fi
