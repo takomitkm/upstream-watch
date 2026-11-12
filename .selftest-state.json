@@ -3,7 +3,7 @@
   "upstreams": {
     "google/leveldb": {
       "ref": "main",
-      "tip": "bb74ef739973a70ca9f0d90788a1da89b788c0ad",
+      "tip": "29465588d3dfdc80fba5e198037582b8fdb5dd60",
       "paths": {
         "db/version_set.cc": "4e37bf90e99558f8ed071ef1f91f744d78c52d37",
         "util/env_windows.cc": "ae5149a505717054261e5e01a31ee1ace315afdf"
@@ -14,5 +14,6 @@
         "published": "2021-02-23"
       }
     }
-  }
+  },
+  "submodules": {}
 }
